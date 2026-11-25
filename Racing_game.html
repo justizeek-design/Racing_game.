@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>NEON DRIFT: TOKYO RUSH</title>
+<!-- PeerJS for zero-backend WebRTC phone-to-PC pairing & QRCode.js for QR generation -->
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&display=swap');
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+  }
+
+  body, html {
+    width: 100%;
+    height: 100%;
+    background: #070510;
+    color: #fff;
+    font-family: 'Orbitron', sans-serif;
+    overflow: hidden;
+  }
+
+  /* ================= DESKTOP GAME STYLES ================= */
+  #game-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: #090616;
+  }
+
+  #hud {
+    position: absolute;
+    top: 20px;
+    left: 25px;
+    right: 25px;
+    display: flex;
+    justify-content: space-between;
+    pointer-events: none;
+    text-shadow: 0 0 10px #00f3ff;
+  }
+
+  .hud-box {
+    background: rgba(10, 6, 28, 0.75);
+    border: 1px solid #00f3ff;
+    padding: 10px 18px;
+    border-radius: 6px;
+    box-shadow: 0 0 15px rgba(0, 243, 255, 0.25);
+  }
+
+  .hud-label { font-size: 11px; color: #ff007f; letter-spacing: 2px; }
+  .hud-val { font-size: 24px; font-weight: 900; color: #fff; }
+
+  #nitro-bar-wrap {
+    width: 160px;
+    height: 10px;
+    background: #1a103c;
+    border: 1px solid #ff007f;
+    margin-top: 6px;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  #nitro-bar {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, #ff007f, #00f3ff);
+    transition: width 0.05s linear;
+  }
+
+  /* OVERLAYS (START & GAME OVER) */
+  .overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(7, 5, 16, 0.92);
+    backdrop-filter: blur(6px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 20;
+    padding: 20px;
+    text-align: center;
+  }
+
+  #gameover-overlay {
+    display: none;
+  }
+
+  h1 {
+    font-size: clamp(2rem, 5vw, 4rem);
+    font-weight: 900;
+    background: linear-gradient(90deg, #ff007f, #00f3ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 18px rgba(255, 0, 127, 0.6));
+    margin-bottom: 6px;
+  }
+
+  .subtitle {
+    color: #00f3ff;
+    letter-spacing: 4px;
+    font-size: 13px;
+    margin-bottom: 24px;
+  }
+
+  .setup-panels {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: stretch;
+    margin-bottom: 24px;
+  }
+
+  .panel {
+    background: rgba(18, 12, 42, 0.9);
+    border: 1px solid rgba(0, 243, 255, 0.4);
+    border-radius: 10px;
+    padding: 20px;
+    width: 280px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 25px rgba(0, 0, 0, 0.6);
+  }
+
+  .panel h3 {
+    font-size: 14px;
+    color: #ff007f;
+    margin-bottom: 12px;
+    letter-spacing: 1.5px;
+  }
+
+  #qr-wrapper {
+    background: #ffffff;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    box-shadow: 0 0 20px rgba(0, 243, 255, 0.4);
+    display: inline-block;
+  }
+
+  #phone-status {
+    font-size: 12px;
+    color: #aaa;
+    margin-top: 6px;
+  }
+  #phone-status.connected {
+    color: #00ff88;
+    font-weight: 700;
+    text-shadow: 0 0 8px #00ff88;
+  }
+
+  .copy-link-btn {
+    background: rgba(0, 243, 255, 0.1);
+    border: 1px solid #00f3ff;
+    color: #00f3ff;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 10px;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: background 0.2s;
+  }
+  .copy-link-btn:hover {
+    background: rgba(0, 243, 255, 0.3);
+  }
+
+  .controls-list {
+    font-size: 12px;
+    line-height: 1.9;
+    color: #cbd5e1;
+    text-align: left;
+  }
+  .controls-list span { color: #00f3ff; font-weight: 700; }
+
+  .arcade-btn {
+    background: linear-gradient(90deg, #ff007f, #7000ff);
+    border: none;
+    color: #fff;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 18px;
+    font-weight: 900;
+    padding: 16px 44px;
+    border-radius: 50px;
+    cursor: pointer;
+    letter-spacing: 2px;
+    box-shadow: 0 0 25px rgba(255, 0, 127, 0.6);
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .arcade-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 35px rgba(0, 243, 255, 0.8);
+  }
+
+  .results-box {
+    font-size: 18px;
+    color: #00f3ff;
+    line-height: 1.8;
+    margin-bottom: 24px;
+    background: rgba(18, 12, 42, 0.9);
+    border: 1px solid #ff007f;
+    padding: 20px 40px;
+    border-radius: 10px;
+    box-shadow: 0 0 25px rgba(255, 0, 127, 0.3);
+  }
+  .results-box span { color: #fff; font-weight: 900; }
+
+  /* ================= PHONE CONTROLLER UI ================= */
+  #controller-ui {
+    display: none;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at center, #150b30 0%, #070412 100%);
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 14px;
+  }
+
+  .ctrl-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(0, 243, 255, 0.3);
+    padding-bottom: 8px;
+  }
+  .ctrl-title { font-size: 14px; font-weight: 900; color: #ff007f; }
+  #ctrl-conn-badge {
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: #331a00;
+    color: #ffaa00;
+    border: 1px solid #ffaa00;
+  }
+  #ctrl-conn-badge.ready {
+    background: #00331a;
+    color: #00ff88;
+    border-color: #00ff88;
+  }
+
+  .ctrl-pad-area {
+    display: flex;
+    justify-content: space-between;
+    align-items: stretch;
+    flex: 1;
+    gap: 16px;
+    padding-top: 12px;
+  }
+
+  .steer-group, .pedal-group {
+    display: flex;
+    gap: 12px;
+    flex: 1;
+  }
+
+  .touch-btn {
+    flex: 1;
+    background: rgba(0, 243, 255, 0.08);
+    border: 2px solid #00f3ff;
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: #00f3ff;
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 900;
+    font-size: 20px;
+    box-shadow: inset 0 0 20px rgba(0, 243, 255, 0.15);
+    transition: background 0.05s, transform 0.05s;
+  }
+
+  .touch-btn.active {
+    background: rgba(0, 243, 255, 0.38);
+    transform: scale(0.96);
+    box-shadow: 0 0 25px #00f3ff;
+  }
+
+  .btn-pink {
+    border-color: #ff007f;
+    color: #ff007f;
+    background: rgba(255, 0, 127, 0.08);
+    box-shadow: inset 0 0 20px rgba(255, 0, 127, 0.15);
+  }
+  .btn-pink.active {
+    background: rgba(255, 0, 127, 0.42);
+    box-shadow: 0 0 25px #ff007f;
+  }
+
+  .btn-gold {
+    border-color: #ffe600;
+    color: #ffe600;
+    background: rgba(255, 230, 0, 0.08);
+  }
+  .btn-gold.active {
+    background: rgba(255, 230, 0, 0.42);
+    box-shadow: 0 0 25px #ffe600;
+  }
+
+  .pedal-col {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: 1;
+  }
+
+  /* Direct phone play controls */
+  #mobile-play-controls {
+    display: none;
+    position: absolute;
+    z-index: 10;
+    left: 12px;
+    right: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    height: min(24vh, 150px);
+    gap: 10px;
+  }
+  #mobile-play-controls .touch-btn { font-size: clamp(13px, 3.5vw, 19px); border-radius: 13px; }
+  #mobile-play-controls .steer-group { flex: 1; }
+  #mobile-play-controls .pedal-group { flex: 1.25; }
+  body.mobile-play #mobile-play-controls { display: flex; }
+  body.mobile-play .setup-panels { display: none; }
+  body.mobile-play .overlay { padding: 16px; }
+  body.mobile-play h1 { font-size: clamp(2.3rem, 12vw, 4rem); }
+  body.mobile-play .subtitle { letter-spacing: 2px; font-size: 11px; }
+  @media (max-height: 500px) {
+    body.mobile-play #mobile-play-controls { height: 29vh; }
+    body.mobile-play .overlay h1 { margin-bottom: 0; }
+    body.mobile-play .overlay .subtitle { margin-bottom: 10px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ==================== DESKTOP HOST VIEW ==================== -->
+<div id="game-container">
+  <canvas id="gameCanvas"></canvas>
+
+  <div id="hud">
+    <div class="hud-box">
+      <div class="hud-label">POS / LAP</div>
+      <div class="hud-val"><span id="hud-pos">1st</span> &bull; <span id="hud-lap">1/3</span></div>
+    </div>
+    <div class="hud-box">
+      <div class="hud-label">DRIFT SCORE</div>
+      <div class="hud-val" id="hud-score">0</div>
+    </div>
+    <div class="hud-box">
+      <div class="hud-label">SPEED / NITRO</div>
+      <div class="hud-val"><span id="hud-speed">0</span> <small style="font-size:12px">KM/H</small></div>
+      <div id="nitro-bar-wrap"><div id="nitro-bar"></div></div>
+    </div>
+  </div>
+
+  <!-- Start Overlay -->
+  <div id="overlay" class="overlay">
+    <h1>NEON DRIFT</h1>
+    <div class="subtitle">TOKYO RUSH // ARCADE EDITION</div>
+
+    <div class="setup-panels">
+      <div class="panel">
+        <h3>PHONE CONTROLLER</h3>
+        <div id="qr-wrapper">
+          <div id="qrcode"></div>
+        </div>
+        <div style="font-size:11px; color:#00f3ff; margin-top:2px;">ROOM: <strong id="room-code-label">----</strong></div>
+        <div id="phone-status">Waiting for connection...</div>
+        <button class="copy-link-btn" id="copy-link-btn">COPY CONTROLLER LINK</button>
+      </div>
+
+      <div class="panel">
+        <h3>INPUT CONTROLS</h3>
+        <div class="controls-list">
+          <div><span>STEER:</span> A/D or &larr;/&rarr;</div>
+          <div><span>GAS / BRAKE:</span> W/S or &uarr;/&darr;</div>
+          <div><span>DRIFT:</span> SPACE</div>
+          <div><span>NITRO:</span> SHIFT</div>
+          <div><span>GAMEPAD:</span> Auto-Detected</div>
+        </div>
+      </div>
+    </div>
+
+    <button id="start-btn" class="arcade-btn">START ENGINE</button>
+  </div>
+
+  <!-- Game Over / Victory Overlay -->
+  <div id="gameover-overlay" class="overlay">
+    <h1>RACE FINISHED</h1>
+    <div class="subtitle">TOKYO CIRCUIT COMPLETED</div>
+
+    <div class="results-box">
+      <div>FINISH POSITION: <span id="res-pos">1ST</span></div>
+      <div>DRIFT SCORE: <span id="res-score">0</span></div>
+    </div>
+
+    <button id="restart-btn" class="arcade-btn">RACE AGAIN</button>
+  </div>
+
+  <div id="mobile-play-controls" aria-label="Touch racing controls">
+    <div class="steer-group">
+      <div class="touch-btn" data-input="left">&larr;<span style="font-size:10px;margin-top:4px;">LEFT</span></div>
+      <div class="touch-btn" data-input="right">&rarr;<span style="font-size:10px;margin-top:4px;">RIGHT</span></div>
+    </div>
+    <div class="pedal-group">
+      <div class="pedal-col">
+        <div class="touch-btn btn-gold" data-input="nitro">NITRO</div>
+        <div class="touch-btn btn-pink" data-input="drift">DRIFT</div>
+      </div>
+      <div class="pedal-col">
+        <div class="touch-btn" data-input="gas" style="flex:1.5;">GAS</div>
+        <div class="touch-btn btn-pink" data-input="brake">BRAKE</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PHONE CONTROLLER VIEW ==================== -->
+<div id="controller-ui">
+  <div class="ctrl-header">
+    <div class="ctrl-title">NEON DRIFT // WIRELESS PAD</div>
+    <div id="ctrl-conn-badge">CONNECTING...</div>
+  </div>
+
+  <div class="ctrl-pad-area">
+    <div class="steer-group">
+      <div class="touch-btn" id="btn-left">&larr;<span style="font-size:11px;margin-top:6px;">LEFT</span></div>
+      <div class="touch-btn" id="btn-right">&rarr;<span style="font-size:11px;margin-top:6px;">RIGHT</span></div>
+    </div>
+    <div class="pedal-group">
+      <div class="pedal-col">
+        <div class="touch-btn btn-gold" id="btn-nitro">NITRO</div>
+        <div class="touch-btn btn-pink" id="btn-drift">DRIFT</div>
+      </div>
+      <div class="pedal-col">
+        <div class="touch-btn" id="btn-gas" style="flex:1.5;">GAS</div>
+        <div class="touch-btn btn-pink" id="btn-brake">BRAKE</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const isControllerMode = urlParams.get('controller') === 'true';
+  const isMobilePlay = urlParams.get('play') === 'mobile';
+  const targetRoomId = urlParams.get('room');
+  if (isMobilePlay) document.body.classList.add('mobile-play');
+
+  // =========================================================================
+  // 1. PHONE CONTROLLER MODE
+  // =========================================================================
+  if (isControllerMode) {
+    document.getElementById('game-container').style.display = 'none';
+    document.getElementById('controller-ui').style.display = 'flex';
+
+    const badge = document.getElementById('ctrl-conn-badge');
+    const state = { left: false, right: false, gas: false, brake: false, drift: false, nitro: false };
+    let conn = null;
+
+    const peer = new Peer();
+    peer.on('open', () => {
+      if (!targetRoomId) {
+        badge.textContent = 'NO ROOM ID';
+        return;
+      }
+      conn = peer.connect('neondrift-' + targetRoomId, { reliable: false });
+      conn.on('open', () => {
+        badge.textContent = 'PAIRED (' + targetRoomId + ')';
+        badge.classList.add('ready');
+        if (navigator.vibrate) navigator.vibrate(60);
+      });
+      conn.on('close', () => {
+        badge.textContent = 'DISCONNECTED';
+        badge.classList.remove('ready');
+      });
+    });
+
+    function sendState() {
+      if (conn && conn.open) conn.send(state);
+    }
+
+    const buttons = [
+      { id: 'btn-left',  key: 'left' },
+      { id: 'btn-right', key: 'right' },
+      { id: 'btn-gas',   key: 'gas' },
+      { id: 'btn-brake', key: 'brake' },
+      { id: 'btn-drift', key: 'drift' },
+      { id: 'btn-nitro', key: 'nitro' }
+    ];
+
+    buttons.forEach(b => {
+      const el = document.getElementById(b.id);
+      const press = (e) => {
+        e.preventDefault();
+        if (!state[b.key]) {
+          state[b.key] = true;
+          el.classList.add('active');
+          if (navigator.vibrate) navigator.vibrate(15);
+          sendState();
+        }
+      };
+      const release = (e) => {
+        e.preventDefault();
+        if (state[b.key]) {
+          state[b.key] = false;
+          el.classList.remove('active');
+          sendState();
+        }
+      };
+      el.addEventListener('touchstart', press, { passive: false });
+      el.addEventListener('touchend', release, { passive: false });
+      el.addEventListener('touchcancel', release, { passive: false });
+      el.addEventListener('mousedown', press);
+      el.addEventListener('mouseup', release);
+      el.addEventListener('mouseleave', release);
+    });
+
+    setInterval(sendState, 33);
+    return;
+  }
+
+  // =========================================================================
+  // 2. DESKTOP HOST MODE
+  // =========================================================================
+  const roomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
+  document.getElementById('room-code-label').textContent = roomCode;
+
+  const baseUrl = window.location.href.split('?')[0];
+  const controllerUrl = `${baseUrl}?controller=true&room=${roomCode}`;
+
+  new QRCode(document.getElementById('qrcode'), {
+    text: controllerUrl,
+    width: 130,
+    height: 130,
+    colorDark: '#000000',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+
+  document.getElementById('copy-link-btn').addEventListener('click', () => {
+    navigator.clipboard.writeText(controllerUrl).then(() => {
+      const btn = document.getElementById('copy-link-btn');
+      btn.textContent = 'LINK COPIED!';
+      setTimeout(() => btn.textContent = 'COPY CONTROLLER LINK', 2000);
+    });
+  });
+
+  const phoneInput = { left: false, right: false, gas: false, brake: false, drift: false, nitro: false };
+  const phoneStatusEl = document.getElementById('phone-status');
+
+  if (isMobilePlay) {
+    document.querySelector('#overlay .subtitle').textContent = 'TOUCH CONTROLS // PHONE EDITION';
+    document.getElementById('start-btn').textContent = 'TAP TO RACE';
+    document.querySelectorAll('#mobile-play-controls [data-input]').forEach(button => {
+      const input = button.dataset.input;
+      const press = event => {
+        event.preventDefault();
+        phoneInput[input] = true;
+        button.classList.add('active');
+        if (button.setPointerCapture && event.pointerId !== undefined) {
+          try { button.setPointerCapture(event.pointerId); } catch (_) {}
+        }
+      };
+      const release = event => {
+        if (event) event.preventDefault();
+        phoneInput[input] = false;
+        button.classList.remove('active');
+      };
+      button.addEventListener('pointerdown', press);
+      button.addEventListener('pointerup', release);
+      button.addEventListener('pointercancel', release);
+      button.addEventListener('lostpointercapture', release);
+      button.addEventListener('contextmenu', event => event.preventDefault());
+    });
+  }
+
+  const hostPeer = new Peer('neondrift-' + roomCode);
+  hostPeer.on('connection', (connection) => {
+    phoneStatusEl.textContent = 'PHONE CONNECTED!';
+    phoneStatusEl.classList.add('connected');
+
+    connection.on('data', (data) => {
+      Object.assign(phoneInput, data);
+    });
+
+    connection.on('close', () => {
+      phoneStatusEl.textContent = 'Phone disconnected';
+      phoneStatusEl.classList.remove('connected');
+      Object.keys(phoneInput).forEach(k => phoneInput[k] = false);
+    });
+  });
+
+  // =========================================================================
+  // 3. ARCADE RACING ENGINE
+  // =========================================================================
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  let W = canvas.width = window.innerWidth;
+  let H = canvas.height = window.innerHeight;
+
+  window.addEventListener('resize', () => {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  });
+
+  const keys = {};
+  window.addEventListener('keydown', e => keys[e.code] = true);
+  window.addEventListener('keyup', e => keys[e.code] = false);
+
+  function getUnifiedInput() {
+    let steer = 0, gas = false, brake = false, drift = false, nitro = false;
+
+    if (keys['ArrowLeft'] || keys['KeyA']) steer -= 1;
+    if (keys['ArrowRight'] || keys['KeyD']) steer += 1;
+    if (keys['ArrowUp'] || keys['KeyW']) gas = true;
+    if (keys['ArrowDown'] || keys['KeyS']) brake = true;
+    if (keys['Space']) drift = true;
+    if (keys['ShiftLeft'] || keys['ShiftRight']) nitro = true;
+
+    if (phoneInput.left) steer -= 1;
+    if (phoneInput.right) steer += 1;
+    if (phoneInput.gas) gas = true;
+    if (phoneInput.brake) brake = true;
+    if (phoneInput.drift) drift = true;
+    if (phoneInput.nitro) nitro = true;
+
+    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const gp = gamepads[0];
+    if (gp) {
+      if (Math.abs(gp.axes[0]) > 0.15) steer += gp.axes[0];
+      if (gp.buttons[7]?.pressed || gp.buttons[0]?.pressed) gas = true;
+      if (gp.buttons[6]?.pressed || gp.buttons[1]?.pressed) brake = true;
+      if (gp.buttons[2]?.pressed || gp.buttons[4]?.pressed) drift = true;
+      if (gp.buttons[5]?.pressed || gp.buttons[3]?.pressed) nitro = true;
+    }
+
+    return { steer: Math.max(-1, Math.min(1, steer)), gas, brake, drift, nitro };
+  }
+
+  const trackPoints = [
+    { x: 0,     y: -900 },
+    { x: 950,   y: -900 },
+    { x: 1450,  y: -450 },
+    { x: 1450,  y: 350 },
+    { x: 900,   y: 850 },
+    { x: 200,   y: 650 },
+    { x: -350,  y: 950 },
+    { x: -1150, y: 750 },
+    { x: -1400, y: 50 },
+    { x: -950,  y: -650 }
+  ];
+  const TRACK_WIDTH = 260;
+  const TOTAL_LAPS = 3;
+
+  function distToSegment(px, py, x1, y1, x2, y2) {
+    const l2 = (x2 - x1) ** 2 + (y2 - y1) ** 2;
+    if (l2 === 0) return Math.hypot(px - x1, py - y1);
+    let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
+  }
+
+  function isOnTrack(x, y) {
+    for (let i = 0; i < trackPoints.length; i++) {
+      const p1 = trackPoints[i];
+      const p2 = trackPoints[(i + 1) % trackPoints.length];
+      if (distToSegment(x, y, p1.x, p1.y, p2.x, p2.y) <= TRACK_WIDTH * 0.55) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  let skidmarks = [];
+  let particles = [];
+  let raceFinished = false;
+
+  class Car {
+    constructor(x, y, angle, color, isPlayer = false, name = 'BOT') {
+      this.reset(x, y, angle, color, isPlayer, name);
+    }
+
+    reset(x, y, angle, color, isPlayer = false, name = 'BOT') {
+      this.x = x;
+      this.y = y;
+      this.vx = 0;
+      this.vy = 0;
+      this.angle = angle;
+      this.color = color;
+      this.isPlayer = isPlayer;
+      this.name = name;
+
+      this.nitro = 100;
+      this.driftScore = 0;
+      this.isDrifting = false;
+      this.waypointIdx = 1;
+      this.lap = 1;
+      this.totalProgress = 0;
+      this.aiSpeedFactor = 0.86 + Math.random() * 0.14;
+      this.finished = false;
+    }
+
+    update() {
+      if (this.finished) return;
+
+      let input = { steer: 0, gas: false, brake: false, drift: false, nitro: false };
+
+      if (this.isPlayer) {
+        input = getUnifiedInput();
+      } else {
+        const target = trackPoints[this.waypointIdx];
+        const desiredAngle = Math.atan2(target.y - this.y, target.x - this.x);
+        let diff = desiredAngle - this.angle;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+
+        input.steer = Math.max(-1, Math.min(1, diff * 2.5));
+        input.gas = true;
+        input.drift = Math.abs(diff) > 0.55;
+      }
+
+      const onRoad = isOnTrack(this.x, this.y);
+      const grip = input.drift ? 0.93 : (onRoad ? 0.96 : 0.90);
+      const maxSpeed = (input.nitro && this.nitro > 0) ? 16.5 : (onRoad ? 12.2 : 7.5);
+      const accel = (this.isPlayer ? 0.42 : 0.38 * this.aiSpeedFactor);
+
+      const speed = Math.hypot(this.vx, this.vy);
+      if (speed > 0.4) {
+        const turnRate = (input.drift ? 0.068 : 0.048) * Math.min(1, speed / 4);
+        this.angle += input.steer * turnRate;
+      }
+
+      const fx = Math.cos(this.angle);
+      const fy = Math.sin(this.angle);
+
+      if (input.gas) {
+        this.vx += fx * accel;
+        this.vy += fy * accel;
+      }
+      if (input.brake) {
+        this.vx -= fx * 0.35;
+        this.vy -= fy * 0.35;
+      }
+
+      if (input.nitro && this.nitro > 1 && input.gas) {
+        this.vx += fx * 0.35;
+        this.vy += fy * 0.35;
+        this.nitro = Math.max(0, this.nitro - 0.8);
+        particles.push({
+          x: this.x - fx * 22,
+          y: this.y - fy * 22,
+          vx: -fx * 4 + (Math.random() - 0.5) * 2,
+          vy: -fy * 4 + (Math.random() - 0.5) * 2,
+          life: 14,
+          color: '#00f3ff'
+        });
+      } else {
+        this.nitro = Math.min(100, this.nitro + 0.15);
+      }
+
+      const rightX = -fy;
+      const rightY = fx;
+      const forwardVel = this.vx * fx + this.vy * fy;
+      let lateralVel = this.vx * rightX + this.vy * rightY;
+
+      lateralVel *= (input.drift ? 0.94 : 0.80);
+      this.vx = fx * forwardVel + rightX * lateralVel;
+      this.vy = fy * forwardVel + rightY * lateralVel;
+
+      const newSpeed = Math.hypot(this.vx, this.vy);
+      if (newSpeed > maxSpeed) {
+        this.vx = (this.vx / newSpeed) * maxSpeed;
+        this.vy = (this.vy / newSpeed) * maxSpeed;
+      }
+
+      this.vx *= grip;
+      this.vy *= grip;
+      this.x += this.vx;
+      this.y += this.vy;
+
+      this.isDrifting = Math.abs(lateralVel) > 2.2 && newSpeed > 5;
+      if (this.isDrifting) {
+        if (this.isPlayer) {
+          this.driftScore += Math.floor(Math.abs(lateralVel) * 3);
+          this.nitro = Math.min(100, this.nitro + 0.25);
+        }
+        skidmarks.push({
+          x1: this.x - fx * 14 + rightX * 9,
+          y1: this.y - fy * 14 + rightY * 9,
+          x2: this.x - fx * 14 - rightX * 9,
+          y2: this.y - fy * 14 - rightY * 9,
+          alpha: 0.55
+        });
+        if (skidmarks.length > 450) skidmarks.shift();
+      }
+
+      // Waypoint & Lap progression check
+      const wp = trackPoints[this.waypointIdx];
+      if (Math.hypot(wp.x - this.x, wp.y - this.y) < 240) {
+        this.waypointIdx = (this.waypointIdx + 1) % trackPoints.length;
+        this.totalProgress++;
+        if (this.waypointIdx === 1 && this.totalProgress > 5) {
+          this.lap++;
+          if (this.lap > TOTAL_LAPS) {
+            this.finished = true;
+            if (!raceFinished) triggerGameOver();
+          }
+        }
+      }
+    }
+
+    draw() {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.rotate(this.angle);
+
+      ctx.shadowColor = this.color;
+      ctx.shadowBlur = this.isDrifting ? 24 : 14;
+
+      ctx.fillStyle = '#0d091f';
+      ctx.strokeStyle = this.color;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.roundRect(-22, -12, 44, 24, 5);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = this.color;
+      ctx.globalAlpha = 0.85;
+      ctx.fillRect(-4, -9, 14, 18);
+      ctx.globalAlpha = 1;
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
+      ctx.beginPath();
+      ctx.moveTo(22, -8);
+      ctx.lineTo(110, -32);
+      ctx.lineTo(110, 32);
+      ctx.lineTo(22, 8);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.restore();
+    }
+  }
+
+  const cars = [
+    new Car(120, -900, 0, '#00f3ff', true, 'PLAYER'),
+    new Car(60, -935, 0, '#ff007f', false, 'KAI'),
+    new Car(0, -865, 0, '#ffe600', false, 'SORA'),
+    new Car(-60, -935, 0, '#00ff88', false, 'REN')
+  ];
+
+  function resolveCarCollisions() {
+    for (let i = 0; i < cars.length; i++) {
+      for (let j = i + 1; j < cars.length; j++) {
+        const a = cars[i];
+        const b = cars[j];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 34 && dist > 0) {
+          const nx = dx / dist;
+          const ny = dy / dist;
+          const overlap = 34 - dist;
+          a.x -= nx * overlap * 0.5;
+          a.y -= ny * overlap * 0.5;
+          b.x += nx * overlap * 0.5;
+          b.y += ny * overlap * 0.5;
+
+          const tempVx = a.vx, tempVy = a.vy;
+          a.vx = b.vx * 0.85; a.vy = b.vy * 0.85;
+          b.vx = tempVx * 0.85; b.vy = tempVy * 0.85;
+        }
+      }
+    }
+  }
+
+  function drawTrack() {
+    ctx.strokeStyle = 'rgba(0, 243, 255, 0.06)';
+    ctx.lineWidth = 1;
+    const gridSize = 150;
+    const startX = Math.floor((cars[0].x - W) / gridSize) * gridSize;
+    const startY = Math.floor((cars[0].y - H) / gridSize) * gridSize;
+    for (let x = startX; x < cars[0].x + W; x += gridSize) {
+      ctx.beginPath(); ctx.moveTo(x, cars[0].y - H); ctx.lineTo(x, cars[0].y + H); ctx.stroke();
+    }
+    for (let y = startY; y < cars[0].y + H; y += gridSize) {
+      ctx.beginPath(); ctx.moveTo(cars[0].x - W, y); ctx.lineTo(cars[0].x + W, y); ctx.stroke();
+    }
+
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    ctx.beginPath();
+    trackPoints.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.closePath();
+    ctx.strokeStyle = '#ff007f';
+    ctx.lineWidth = TRACK_WIDTH + 16;
+    ctx.stroke();
+
+    ctx.strokeStyle = '#141026';
+    ctx.lineWidth = TRACK_WIDTH;
+    ctx.stroke();
+
+    ctx.setLineDash([35, 35]);
+    ctx.strokeStyle = 'rgba(0, 243, 255, 0.35)';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Start / Finish Line Banner
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(180, -900 - TRACK_WIDTH / 2, 16, TRACK_WIDTH);
+  }
+
+  let running = false;
+
+  document.getElementById('start-btn').addEventListener('click', () => {
+    document.getElementById('overlay').style.display = 'none';
+    running = true;
+  });
+
+  document.getElementById('restart-btn').addEventListener('click', () => {
+    document.getElementById('gameover-overlay').style.display = 'none';
+    skidmarks = [];
+    particles = [];
+    raceFinished = false;
+    cars[0].reset(120, -900, 0, '#00f3ff', true, 'PLAYER');
+    cars[1].reset(60, -935, 0, '#ff007f', false, 'KAI');
+    cars[2].reset(0, -865, 0, '#ffe600', false, 'SORA');
+    cars[3].reset(-60, -935, 0, '#00ff88', false, 'REN');
+    running = true;
+  });
+
+  function triggerGameOver() {
+    raceFinished = true;
+    running = false;
+
+    const sorted = [...cars].sort((a, b) => b.totalProgress - a.totalProgress);
+    const rank = sorted.indexOf(cars[0]) + 1;
+    const suffixes = ['ST', 'ND', 'RD', 'TH'];
+    const rankStr = rank + (suffixes[rank - 1] || 'TH');
+
+    document.getElementById('res-pos').textContent = rankStr;
+    document.getElementById('res-score').textContent = cars[0].driftScore.toLocaleString();
+    document.getElementById('gameover-overlay').style.display = 'flex';
+  }
+
+  function loop() {
+    requestAnimationFrame(loop);
+
+    const player = cars[0];
+    if (running) {
+      cars.forEach(c => c.update());
+      resolveCarCollisions();
+    }
+
+    ctx.fillStyle = '#070510';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.save();
+    ctx.translate(W / 2 - player.x, H / 2 - player.y);
+
+    drawTrack();
+
+    skidmarks.forEach(s => {
+      ctx.strokeStyle = `rgba(255, 0, 127, ${s.alpha})`;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(s.x1, s.y1);
+      ctx.lineTo(s.x2, s.y2);
+      ctx.stroke();
+    });
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx; p.y += p.vy; p.life--;
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = p.life / 14;
+      ctx.fillRect(p.x - 3, p.y - 3, 6, 6);
+      ctx.globalAlpha = 1;
+      if (p.life <= 0) particles.splice(i, 1);
+    }
+
+    cars.forEach(c => c.draw());
+    ctx.restore();
+
+    const speedKmh = Math.round(Math.hypot(player.vx, player.vy) * 18);
+    document.getElementById('hud-speed').textContent = speedKmh;
+    document.getElementById('hud-score').textContent = player.driftScore.toLocaleString();
+    document.getElementById('nitro-bar').style.width = player.nitro + '%';
+    document.getElementById('hud-lap').textContent = `${Math.min(TOTAL_LAPS, player.lap)}/${TOTAL_LAPS}`;
+
+    const sorted = [...cars].sort((a, b) => b.totalProgress - a.totalProgress);
+    const rank = sorted.indexOf(player) + 1;
+    const suffixes = ['st', 'nd', 'rd', 'th'];
+    document.getElementById('hud-pos').textContent = rank + (suffixes[rank - 1] || 'th');
+  }
+
+  loop();
+})();
+</script>
+</body>
+</html>
